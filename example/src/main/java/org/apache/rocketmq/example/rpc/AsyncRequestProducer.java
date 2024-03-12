@@ -37,27 +37,31 @@ public class AsyncRequestProducer {
         producer.start();
 
         try {
-            Message msg = new Message(topic,
-                "",
-                "Hello world".getBytes(RemotingHelper.DEFAULT_CHARSET));
+            Message msg =
+                    new Message(topic, "", "Hello world".getBytes(RemotingHelper.DEFAULT_CHARSET));
 
             long begin = System.currentTimeMillis();
-            producer.request(msg, new RequestCallback() {
-                @Override
-                public void onSuccess(Message message) {
-                    long cost = System.currentTimeMillis() - begin;
-                    System.out.printf("request to <%s> cost: %d replyMessage: %s %n", topic, cost, message);
-                }
+            producer.request(
+                    msg,
+                    new RequestCallback() {
+                        @Override
+                        public void onSuccess(Message message) {
+                            long cost = System.currentTimeMillis() - begin;
+                            System.out.printf(
+                                    "request to <%s> cost: %d replyMessage: %s %n",
+                                    topic, cost, message);
+                        }
 
-                @Override
-                public void onException(Throwable e) {
-                    System.err.printf("request to <%s> fail.", topic);
-                }
-            }, ttl);
+                        @Override
+                        public void onException(Throwable e) {
+                            System.err.printf("request to <%s> fail.", topic);
+                        }
+                    },
+                    ttl);
         } catch (Exception e) {
             log.warn("", e);
         }
-         /* shutdown after your request callback is finished */
-//        producer.shutdown();
+        /* shutdown after your request callback is finished */
+        //        producer.shutdown();
     }
 }

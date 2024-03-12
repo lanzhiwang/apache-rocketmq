@@ -19,6 +19,7 @@ package org.apache.rocketmq.example.schedule;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.common.message.Message;
 
+/** demo 10 */
 public class ScheduledMessageProducer {
     public static void main(String[] args) throws Exception {
         // Instantiate a producer to send scheduled messages
@@ -33,9 +34,7 @@ public class ScheduledMessageProducer {
             // Send the message
             producer.send(message);
         }
-        
         // Shutdown producer after use.
         producer.shutdown();
     }
-    
 }

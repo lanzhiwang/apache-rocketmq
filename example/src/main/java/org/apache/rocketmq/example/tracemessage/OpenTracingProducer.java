@@ -21,6 +21,7 @@ import io.jaegertracing.Configuration;
 import io.jaegertracing.internal.samplers.ConstSampler;
 import io.opentracing.Tracer;
 import io.opentracing.util.GlobalTracer;
+
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.client.producer.SendResult;
@@ -34,14 +35,17 @@ public class OpenTracingProducer {
         Tracer tracer = initTracer();
 
         DefaultMQProducer producer = new DefaultMQProducer("ProducerGroupName");
-        producer.getDefaultMQProducerImpl().registerSendMessageHook(new SendMessageOpenTracingHookImpl(tracer));
+        producer.getDefaultMQProducerImpl()
+                .registerSendMessageHook(new SendMessageOpenTracingHookImpl(tracer));
         producer.start();
 
         try {
-            Message msg = new Message("TopicTest",
-                    "TagA",
-                    "OrderID188",
-                    "Hello world".getBytes(RemotingHelper.DEFAULT_CHARSET));
+            Message msg =
+                    new Message(
+                            "TopicTest",
+                            "TagA",
+                            "OrderID188",
+                            "Hello world".getBytes(RemotingHelper.DEFAULT_CHARSET));
             SendResult sendResult = producer.send(msg);
             System.out.printf("%s%n", sendResult);
 
@@ -53,15 +57,17 @@ public class OpenTracingProducer {
     }
 
     private static Tracer initTracer() {
-        Configuration.SamplerConfiguration samplerConfig = Configuration.SamplerConfiguration.fromEnv()
-                .withType(ConstSampler.TYPE)
-                .withParam(1);
-        Configuration.ReporterConfiguration reporterConfig = Configuration.ReporterConfiguration.fromEnv()
-                .withLogSpans(true);
+        Configuration.SamplerConfiguration samplerConfig =
+                Configuration.SamplerConfiguration.fromEnv()
+                        .withType(ConstSampler.TYPE)
+                        .withParam(1);
+        Configuration.ReporterConfiguration reporterConfig =
+                Configuration.ReporterConfiguration.fromEnv().withLogSpans(true);
 
-        Configuration config = new Configuration("rocketmq")
-                .withSampler(samplerConfig)
-                .withReporter(reporterConfig);
+        Configuration config =
+                new Configuration("rocketmq")
+                        .withSampler(samplerConfig)
+                        .withReporter(reporterConfig);
         GlobalTracer.registerIfAbsent(config.getTracer());
         return config.getTracer();
     }

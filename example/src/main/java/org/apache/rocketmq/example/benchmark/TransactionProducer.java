@@ -46,102 +46,170 @@ import java.util.Map;
 import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
 
 public class TransactionProducer {
     private static final long START_TIME = System.currentTimeMillis();
     private static final LongAdder MSG_COUNT = new LongAdder();
 
-    //broker max check times should less than this value
+    // broker max check times should less than this value
     static final int MAX_CHECK_RESULT_IN_MSG = 20;
 
     public static void main(String[] args) throws MQClientException, UnsupportedEncodingException {
         Options options = ServerUtil.buildCommandlineOptions(new Options());
-        CommandLine commandLine = ServerUtil.parseCmdLine("TransactionProducer", args, buildCommandlineOptions(options), new PosixParser());
+        CommandLine commandLine =
+                ServerUtil.parseCmdLine(
+                        "TransactionProducer",
+                        args,
+                        buildCommandlineOptions(options),
+                        new PosixParser());
         TxSendConfig config = new TxSendConfig();
-        config.topic = commandLine.hasOption('t') ? commandLine.getOptionValue('t').trim() : "BenchmarkTest";
-        config.threadCount = commandLine.hasOption('w') ? Integer.parseInt(commandLine.getOptionValue('w')) : 32;
-        config.messageSize = commandLine.hasOption('s') ? Integer.parseInt(commandLine.getOptionValue('s')) : 2048;
-        config.sendRollbackRate = commandLine.hasOption("sr") ? Double.parseDouble(commandLine.getOptionValue("sr")) : 0.0;
-        config.sendUnknownRate = commandLine.hasOption("su") ? Double.parseDouble(commandLine.getOptionValue("su")) : 0.0;
-        config.checkRollbackRate = commandLine.hasOption("cr") ? Double.parseDouble(commandLine.getOptionValue("cr")) : 0.0;
-        config.checkUnknownRate = commandLine.hasOption("cu") ? Double.parseDouble(commandLine.getOptionValue("cu")) : 0.0;
-        config.batchId = commandLine.hasOption("b") ? Long.parseLong(commandLine.getOptionValue("b")) : System.currentTimeMillis();
-        config.sendInterval = commandLine.hasOption("i") ? Integer.parseInt(commandLine.getOptionValue("i")) : 0;
-        config.aclEnable = commandLine.hasOption('a') && Boolean.parseBoolean(commandLine.getOptionValue('a'));
-        config.msgTraceEnable = commandLine.hasOption('m') && Boolean.parseBoolean(commandLine.getOptionValue('m'));
+        config.topic =
+                commandLine.hasOption('t')
+                        ? commandLine.getOptionValue('t').trim()
+                        : "BenchmarkTest";
+        config.threadCount =
+                commandLine.hasOption('w') ? Integer.parseInt(commandLine.getOptionValue('w')) : 32;
+        config.messageSize =
+                commandLine.hasOption('s')
+                        ? Integer.parseInt(commandLine.getOptionValue('s'))
+                        : 2048;
+        config.sendRollbackRate =
+                commandLine.hasOption("sr")
+                        ? Double.parseDouble(commandLine.getOptionValue("sr"))
+                        : 0.0;
+        config.sendUnknownRate =
+                commandLine.hasOption("su")
+                        ? Double.parseDouble(commandLine.getOptionValue("su"))
+                        : 0.0;
+        config.checkRollbackRate =
+                commandLine.hasOption("cr")
+                        ? Double.parseDouble(commandLine.getOptionValue("cr"))
+                        : 0.0;
+        config.checkUnknownRate =
+                commandLine.hasOption("cu")
+                        ? Double.parseDouble(commandLine.getOptionValue("cu"))
+                        : 0.0;
+        config.batchId =
+                commandLine.hasOption("b")
+                        ? Long.parseLong(commandLine.getOptionValue("b"))
+                        : System.currentTimeMillis();
+        config.sendInterval =
+                commandLine.hasOption("i") ? Integer.parseInt(commandLine.getOptionValue("i")) : 0;
+        config.aclEnable =
+                commandLine.hasOption('a') && Boolean.parseBoolean(commandLine.getOptionValue('a'));
+        config.msgTraceEnable =
+                commandLine.hasOption('m') && Boolean.parseBoolean(commandLine.getOptionValue('m'));
 
         final ExecutorService sendThreadPool = Executors.newFixedThreadPool(config.threadCount);
 
         final StatsBenchmarkTProducer statsBenchmark = new StatsBenchmarkTProducer();
 
-        ScheduledExecutorService executorService = new ScheduledThreadPoolExecutor(1,
-                new BasicThreadFactory.Builder().namingPattern("BenchmarkTimerThread-%d").daemon(true).build());
+        ScheduledExecutorService executorService =
+                new ScheduledThreadPoolExecutor(
+                        1,
+                        new BasicThreadFactory.Builder()
+                                .namingPattern("BenchmarkTimerThread-%d")
+                                .daemon(true)
+                                .build());
 
         final LinkedList<Snapshot> snapshotList = new LinkedList<>();
 
-        executorService.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-                snapshotList.addLast(statsBenchmark.createSnapshot());
-                while (snapshotList.size() > 10) {
-                    snapshotList.removeFirst();
-                }
-            }
-        }, 1000, 1000, TimeUnit.MILLISECONDS);
+        executorService.scheduleAtFixedRate(
+                new TimerTask() {
+                    @Override
+                    public void run() {
+                        snapshotList.addLast(statsBenchmark.createSnapshot());
+                        while (snapshotList.size() > 10) {
+                            snapshotList.removeFirst();
+                        }
+                    }
+                },
+                1000,
+                1000,
+                TimeUnit.MILLISECONDS);
 
-        executorService.scheduleAtFixedRate(new TimerTask() {
-            private void printStats() {
-                if (snapshotList.size() >= 10) {
-                    Snapshot begin = snapshotList.getFirst();
-                    Snapshot end = snapshotList.getLast();
+        executorService.scheduleAtFixedRate(
+                new TimerTask() {
+                    private void printStats() {
+                        if (snapshotList.size() >= 10) {
+                            Snapshot begin = snapshotList.getFirst();
+                            Snapshot end = snapshotList.getLast();
 
-                    final long sendCount = (end.sendRequestSuccessCount - begin.sendRequestSuccessCount)
-                            + (end.sendRequestFailedCount - begin.sendRequestFailedCount);
-                    final long sendTps = (sendCount * 1000L) / (end.endTime - begin.endTime);
-                    final double averageRT = (end.sendMessageTimeTotal - begin.sendMessageTimeTotal) / (double) (end.sendRequestSuccessCount - begin.sendRequestSuccessCount);
+                            final long sendCount =
+                                    (end.sendRequestSuccessCount - begin.sendRequestSuccessCount)
+                                            + (end.sendRequestFailedCount
+                                                    - begin.sendRequestFailedCount);
+                            final long sendTps =
+                                    (sendCount * 1000L) / (end.endTime - begin.endTime);
+                            final double averageRT =
+                                    (end.sendMessageTimeTotal - begin.sendMessageTimeTotal)
+                                            / (double)
+                                                    (end.sendRequestSuccessCount
+                                                            - begin.sendRequestSuccessCount);
 
-                    final long failCount = end.sendRequestFailedCount - begin.sendRequestFailedCount;
-                    final long checkCount = end.checkCount - begin.checkCount;
-                    final long unexpectedCheck = end.unexpectedCheckCount - begin.unexpectedCheckCount;
-                    final long dupCheck = end.duplicatedCheck - begin.duplicatedCheck;
+                            final long failCount =
+                                    end.sendRequestFailedCount - begin.sendRequestFailedCount;
+                            final long checkCount = end.checkCount - begin.checkCount;
+                            final long unexpectedCheck =
+                                    end.unexpectedCheckCount - begin.unexpectedCheckCount;
+                            final long dupCheck = end.duplicatedCheck - begin.duplicatedCheck;
 
-                    System.out.printf(
-                        "Current Time: %s Send TPS:%5d Max RT(ms):%5d AVG RT(ms):%3.1f Send Failed: %d check: %d unexpectedCheck: %d duplicatedCheck: %d %n",
-                            System.currentTimeMillis(), sendTps, statsBenchmark.getSendMessageMaxRT().get(), averageRT, failCount, checkCount,
-                            unexpectedCheck, dupCheck);
-                    statsBenchmark.getSendMessageMaxRT().set(0);
-                }
-            }
+                            System.out.printf(
+                                    "Current Time: %s Send TPS:%5d Max RT(ms):%5d AVG RT(ms):%3.1f"
+                                        + " Send Failed: %d check: %d unexpectedCheck: %d"
+                                        + " duplicatedCheck: %d %n",
+                                    System.currentTimeMillis(),
+                                    sendTps,
+                                    statsBenchmark.getSendMessageMaxRT().get(),
+                                    averageRT,
+                                    failCount,
+                                    checkCount,
+                                    unexpectedCheck,
+                                    dupCheck);
+                            statsBenchmark.getSendMessageMaxRT().set(0);
+                        }
+                    }
 
-            @Override
-            public void run() {
-                try {
-                    this.printStats();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        }, 10000, 10000, TimeUnit.MILLISECONDS);
+                    @Override
+                    public void run() {
+                        try {
+                            this.printStats();
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                },
+                10000,
+                10000,
+                TimeUnit.MILLISECONDS);
 
         RPCHook rpcHook = null;
         if (config.aclEnable) {
-            String ak = commandLine.hasOption("ak") ? String.valueOf(commandLine.getOptionValue("ak")) : AclClient.ACL_ACCESS_KEY;
-            String sk = commandLine.hasOption("sk") ? String.valueOf(commandLine.getOptionValue("sk")) : AclClient.ACL_SECRET_KEY;
+            String ak =
+                    commandLine.hasOption("ak")
+                            ? String.valueOf(commandLine.getOptionValue("ak"))
+                            : AclClient.ACL_ACCESS_KEY;
+            String sk =
+                    commandLine.hasOption("sk")
+                            ? String.valueOf(commandLine.getOptionValue("sk"))
+                            : AclClient.ACL_SECRET_KEY;
             rpcHook = AclClient.getAclRPCHook(ak, sk);
         }
-        final TransactionListener transactionCheckListener = new TransactionListenerImpl(statsBenchmark, config);
-        final TransactionMQProducer producer = new TransactionMQProducer(
-                null,
-                "benchmark_transaction_producer",
-                rpcHook,
-                config.msgTraceEnable,
-                null);
+        final TransactionListener transactionCheckListener =
+                new TransactionListenerImpl(statsBenchmark, config);
+        final TransactionMQProducer producer =
+                new TransactionMQProducer(
+                        null,
+                        "benchmark_transaction_producer",
+                        rpcHook,
+                        config.msgTraceEnable,
+                        null);
         producer.setInstanceName(Long.toString(System.currentTimeMillis()));
         producer.setTransactionListener(transactionCheckListener);
         producer.setDefaultTopicQueueNums(1000);
@@ -152,45 +220,52 @@ public class TransactionProducer {
         producer.start();
 
         for (int i = 0; i < config.threadCount; i++) {
-            sendThreadPool.execute(new Runnable() {
-                @Override
-                public void run() {
-                    while (true) {
-                        boolean success = false;
-                        final long beginTimestamp = System.currentTimeMillis();
-                        try {
-                            SendResult sendResult =
-                                    producer.sendMessageInTransaction(buildMessage(config), null);
-                            success = sendResult != null && sendResult.getSendStatus() == SendStatus.SEND_OK;
-                        } catch (Throwable e) {
-                            success = false;
-                        } finally {
-                            final long currentRT = System.currentTimeMillis() - beginTimestamp;
-                            statsBenchmark.getSendMessageTimeTotal().add(currentRT);
-                            long prevMaxRT = statsBenchmark.getSendMessageMaxRT().get();
-                            while (currentRT > prevMaxRT) {
-                                boolean updated = statsBenchmark.getSendMessageMaxRT()
-                                        .compareAndSet(prevMaxRT, currentRT);
-                                if (updated)
-                                    break;
-
-                                prevMaxRT = statsBenchmark.getSendMessageMaxRT().get();
-                            }
-                            if (success) {
-                                statsBenchmark.getSendRequestSuccessCount().increment();
-                            } else {
-                                statsBenchmark.getSendRequestFailedCount().increment();
-                            }
-                            if (config.sendInterval > 0) {
+            sendThreadPool.execute(
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            while (true) {
+                                boolean success = false;
+                                final long beginTimestamp = System.currentTimeMillis();
                                 try {
-                                    Thread.sleep(config.sendInterval);
-                                } catch (InterruptedException e) {
+                                    SendResult sendResult =
+                                            producer.sendMessageInTransaction(
+                                                    buildMessage(config), null);
+                                    success =
+                                            sendResult != null
+                                                    && sendResult.getSendStatus()
+                                                            == SendStatus.SEND_OK;
+                                } catch (Throwable e) {
+                                    success = false;
+                                } finally {
+                                    final long currentRT =
+                                            System.currentTimeMillis() - beginTimestamp;
+                                    statsBenchmark.getSendMessageTimeTotal().add(currentRT);
+                                    long prevMaxRT = statsBenchmark.getSendMessageMaxRT().get();
+                                    while (currentRT > prevMaxRT) {
+                                        boolean updated =
+                                                statsBenchmark
+                                                        .getSendMessageMaxRT()
+                                                        .compareAndSet(prevMaxRT, currentRT);
+                                        if (updated) break;
+
+                                        prevMaxRT = statsBenchmark.getSendMessageMaxRT().get();
+                                    }
+                                    if (success) {
+                                        statsBenchmark.getSendRequestSuccessCount().increment();
+                                    } else {
+                                        statsBenchmark.getSendRequestFailedCount().increment();
+                                    }
+                                    if (config.sendInterval > 0) {
+                                        try {
+                                            Thread.sleep(config.sendInterval);
+                                        } catch (InterruptedException e) {
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
-                }
-            });
+                    });
         }
     }
 
@@ -263,11 +338,21 @@ public class TransactionProducer {
         opt.setRequired(false);
         options.addOption(opt);
 
-        opt = new Option("b", "test batch id", true, "test batch id, Default: System.currentMillis()");
+        opt =
+                new Option(
+                        "b",
+                        "test batch id",
+                        true,
+                        "test batch id, Default: System.currentMillis()");
         opt.setRequired(false);
         options.addOption(opt);
 
-        opt = new Option("i", "send interval", true, "sleep interval in millis between messages, Default: 0");
+        opt =
+                new Option(
+                        "i",
+                        "send interval",
+                        true,
+                        "sleep interval in millis between messages, Default: 0");
         opt.setRequired(false);
         options.addOption(opt);
 
@@ -303,7 +388,8 @@ class TransactionListenerImpl implements TransactionListener {
         List<LocalTransactionState> checkResult;
     }
 
-    public TransactionListenerImpl(StatsBenchmarkTProducer statsBenchmark, TxSendConfig sendConfig) {
+    public TransactionListenerImpl(
+            StatsBenchmarkTProducer statsBenchmark, TxSendConfig sendConfig) {
         this.statBenchmark = statsBenchmark;
         this.sendConfig = sendConfig;
     }
@@ -360,9 +446,11 @@ class TransactionListenerImpl implements TransactionListener {
             statBenchmark.getDuplicatedCheckCount().increment();
         }
         if (msgMeta.sendResult != LocalTransactionState.UNKNOW) {
-            System.out.printf("%s unexpected check: msgId=%s,txId=%s,checkTimes=%s,sendResult=%s\n",
+            System.out.printf(
+                    "%s unexpected check: msgId=%s,txId=%s,checkTimes=%s,sendResult=%s\n",
                     new SimpleDateFormat("HH:mm:ss,SSS").format(new Date()),
-                    msg.getMsgId(), msg.getTransactionId(),
+                    msg.getMsgId(),
+                    msg.getTransactionId(),
                     msg.getUserProperty(MessageConst.PROPERTY_TRANSACTION_CHECK_TIMES),
                     msgMeta.sendResult.toString());
             statBenchmark.getUnexpectedCheckCount().increment();
@@ -372,10 +460,14 @@ class TransactionListenerImpl implements TransactionListener {
         for (int i = 0; i < times - 1; i++) {
             LocalTransactionState s = msgMeta.checkResult.get(i);
             if (s != LocalTransactionState.UNKNOW) {
-                System.out.printf("%s unexpected check: msgId=%s,txId=%s,checkTimes=%s,sendResult,lastCheckResult=%s\n",
+                System.out.printf(
+                        "%s unexpected check:"
+                            + " msgId=%s,txId=%s,checkTimes=%s,sendResult,lastCheckResult=%s\n",
                         new SimpleDateFormat("HH:mm:ss,SSS").format(new Date()),
-                        msg.getMsgId(), msg.getTransactionId(),
-                        msg.getUserProperty(MessageConst.PROPERTY_TRANSACTION_CHECK_TIMES), s);
+                        msg.getMsgId(),
+                        msg.getTransactionId(),
+                        msg.getUserProperty(MessageConst.PROPERTY_TRANSACTION_CHECK_TIMES),
+                        s);
                 statBenchmark.getUnexpectedCheckCount().increment();
                 return s;
             }

@@ -16,11 +16,6 @@
  */
 package org.apache.rocketmq.example.simple;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 import org.apache.rocketmq.acl.common.AclClientRPCHook;
 import org.apache.rocketmq.acl.common.SessionCredentials;
 import org.apache.rocketmq.client.consumer.DefaultMQPullConsumer;
@@ -40,6 +35,10 @@ import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.remoting.RPCHook;
 import org.apache.rocketmq.remoting.common.RemotingHelper;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class AclClient {
 
@@ -63,10 +62,12 @@ public class AclClient {
         for (int i = 0; i < 128; i++)
             try {
                 {
-                    Message msg = new Message("TopicTest",
-                        "TagA",
-                        "OrderID188",
-                        "Hello world".getBytes(RemotingHelper.DEFAULT_CHARSET));
+                    Message msg =
+                            new Message(
+                                    "TopicTest",
+                                    "TagA",
+                                    "OrderID188",
+                                    "Hello world".getBytes(RemotingHelper.DEFAULT_CHARSET));
                     SendResult sendResult = producer.send(msg);
                     System.out.printf("%s%n", sendResult);
                 }
@@ -80,27 +81,36 @@ public class AclClient {
 
     public static void pushConsumer() throws MQClientException {
 
-        DefaultMQPushConsumer consumer = new DefaultMQPushConsumer("please_rename_unique_group_name_5", getAclRPCHook(), new AllocateMessageQueueAveragely());
+        DefaultMQPushConsumer consumer =
+                new DefaultMQPushConsumer(
+                        "please_rename_unique_group_name_5",
+                        getAclRPCHook(),
+                        new AllocateMessageQueueAveragely());
         consumer.setNamesrvAddr("127.0.0.1:9876");
         consumer.subscribe("TopicTest", "*");
         consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_FIRST_OFFSET);
         // Wrong time format 2017_0422_221800
         consumer.setConsumeTimestamp("20180422221800");
-        consumer.registerMessageListener(new MessageListenerConcurrently() {
+        consumer.registerMessageListener(
+                new MessageListenerConcurrently() {
 
-            @Override
-            public ConsumeConcurrentlyStatus consumeMessage(List<MessageExt> msgs, ConsumeConcurrentlyContext context) {
-                System.out.printf("%s Receive New Messages: %s %n", Thread.currentThread().getName(), msgs);
-                printBody(msgs);
-                return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
-            }
-        });
+                    @Override
+                    public ConsumeConcurrentlyStatus consumeMessage(
+                            List<MessageExt> msgs, ConsumeConcurrentlyContext context) {
+                        System.out.printf(
+                                "%s Receive New Messages: %s %n",
+                                Thread.currentThread().getName(), msgs);
+                        printBody(msgs);
+                        return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
+                    }
+                });
         consumer.start();
         System.out.printf("Consumer Started.%n");
     }
 
     public static void pullConsumer() throws MQClientException {
-        DefaultMQPullConsumer consumer = new DefaultMQPullConsumer("please_rename_unique_group_name_6", getAclRPCHook());
+        DefaultMQPullConsumer consumer =
+                new DefaultMQPullConsumer("please_rename_unique_group_name_6", getAclRPCHook());
         consumer.setNamesrvAddr("127.0.0.1:9876");
         consumer.start();
 
@@ -111,7 +121,7 @@ public class AclClient {
             while (true) {
                 try {
                     PullResult pullResult =
-                        consumer.pullBlockIfNotFound(mq, null, getMessageQueueOffset(mq), 32);
+                            consumer.pullBlockIfNotFound(mq, null, getMessageQueueOffset(mq), 32);
                     System.out.printf("%s%n", pullResult);
                     putMessageQueueOffset(mq, pullResult.getNextBeginOffset());
                     printBody(pullResult);
@@ -141,19 +151,18 @@ public class AclClient {
     }
 
     private static void printBody(List<MessageExt> msg) {
-        if (msg == null || msg.size() == 0)
-            return;
+        if (msg == null || msg.size() == 0) return;
         for (MessageExt m : msg) {
             if (m != null) {
-                System.out.printf("msgId : %s  body : %s  \n\r", m.getMsgId(), new String(m.getBody()));
+                System.out.printf(
+                        "msgId : %s  body : %s  \n\r", m.getMsgId(), new String(m.getBody()));
             }
         }
     }
 
     private static long getMessageQueueOffset(MessageQueue mq) {
         Long offset = OFFSE_TABLE.get(mq);
-        if (offset != null)
-            return offset;
+        if (offset != null) return offset;
 
         return 0;
     }
@@ -163,6 +172,6 @@ public class AclClient {
     }
 
     static RPCHook getAclRPCHook() {
-        return new AclClientRPCHook(new SessionCredentials(ACL_ACCESS_KEY,ACL_SECRET_KEY));
+        return new AclClientRPCHook(new SessionCredentials(ACL_ACCESS_KEY, ACL_SECRET_KEY));
     }
 }

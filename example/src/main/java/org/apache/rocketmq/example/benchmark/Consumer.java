@@ -17,7 +17,6 @@
 
 package org.apache.rocketmq.example.benchmark;
 
-import java.util.concurrent.atomic.LongAdder;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
@@ -45,91 +44,156 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
 
 public class Consumer {
 
     public static void main(String[] args) throws MQClientException, IOException {
         Options options = ServerUtil.buildCommandlineOptions(new Options());
-        CommandLine commandLine = ServerUtil.parseCmdLine("benchmarkConsumer", args, buildCommandlineOptions(options), new PosixParser());
+        CommandLine commandLine =
+                ServerUtil.parseCmdLine(
+                        "benchmarkConsumer",
+                        args,
+                        buildCommandlineOptions(options),
+                        new PosixParser());
         if (null == commandLine) {
             System.exit(-1);
         }
 
-        final String topic = commandLine.hasOption('t') ? commandLine.getOptionValue('t').trim() : "BenchmarkTest";
-        final int threadCount = commandLine.hasOption('w') ? Integer.parseInt(commandLine.getOptionValue('w')) : 20;
-        final String groupPrefix = commandLine.hasOption('g') ? commandLine.getOptionValue('g').trim() : "benchmark_consumer";
-        final String isSuffixEnable = commandLine.hasOption('p') ? commandLine.getOptionValue('p').trim() : "false";
-        final String filterType = commandLine.hasOption('f') ? commandLine.getOptionValue('f').trim() : null;
-        final String expression = commandLine.hasOption('e') ? commandLine.getOptionValue('e').trim() : null;
-        final double failRate = commandLine.hasOption('r') ? Double.parseDouble(commandLine.getOptionValue('r').trim()) : 0.0;
-        final boolean msgTraceEnable = commandLine.hasOption('m') && Boolean.parseBoolean(commandLine.getOptionValue('m'));
-        final boolean aclEnable = commandLine.hasOption('a') && Boolean.parseBoolean(commandLine.getOptionValue('a'));
+        final String topic =
+                commandLine.hasOption('t')
+                        ? commandLine.getOptionValue('t').trim()
+                        : "BenchmarkTest";
+        final int threadCount =
+                commandLine.hasOption('w') ? Integer.parseInt(commandLine.getOptionValue('w')) : 20;
+        final String groupPrefix =
+                commandLine.hasOption('g')
+                        ? commandLine.getOptionValue('g').trim()
+                        : "benchmark_consumer";
+        final String isSuffixEnable =
+                commandLine.hasOption('p') ? commandLine.getOptionValue('p').trim() : "false";
+        final String filterType =
+                commandLine.hasOption('f') ? commandLine.getOptionValue('f').trim() : null;
+        final String expression =
+                commandLine.hasOption('e') ? commandLine.getOptionValue('e').trim() : null;
+        final double failRate =
+                commandLine.hasOption('r')
+                        ? Double.parseDouble(commandLine.getOptionValue('r').trim())
+                        : 0.0;
+        final boolean msgTraceEnable =
+                commandLine.hasOption('m') && Boolean.parseBoolean(commandLine.getOptionValue('m'));
+        final boolean aclEnable =
+                commandLine.hasOption('a') && Boolean.parseBoolean(commandLine.getOptionValue('a'));
 
         String group = groupPrefix;
         if (Boolean.parseBoolean(isSuffixEnable)) {
             group = groupPrefix + "_" + (System.currentTimeMillis() % 100);
         }
 
-        System.out.printf("topic: %s, threadCount %d, group: %s, suffix: %s, filterType: %s, expression: %s, msgTraceEnable: %s, aclEnable: %s%n",
-            topic, threadCount, group, isSuffixEnable, filterType, expression, msgTraceEnable, aclEnable);
+        System.out.printf(
+                "topic: %s, threadCount %d, group: %s, suffix: %s, filterType: %s, expression: %s,"
+                        + " msgTraceEnable: %s, aclEnable: %s%n",
+                topic,
+                threadCount,
+                group,
+                isSuffixEnable,
+                filterType,
+                expression,
+                msgTraceEnable,
+                aclEnable);
 
         final StatsBenchmarkConsumer statsBenchmarkConsumer = new StatsBenchmarkConsumer();
 
-        ScheduledExecutorService executorService = new ScheduledThreadPoolExecutor(1,
-                new BasicThreadFactory.Builder().namingPattern("BenchmarkTimerThread-%d").daemon(true).build());
+        ScheduledExecutorService executorService =
+                new ScheduledThreadPoolExecutor(
+                        1,
+                        new BasicThreadFactory.Builder()
+                                .namingPattern("BenchmarkTimerThread-%d")
+                                .daemon(true)
+                                .build());
 
         final LinkedList<Long[]> snapshotList = new LinkedList<Long[]>();
 
-        executorService.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-                snapshotList.addLast(statsBenchmarkConsumer.createSnapshot());
-                if (snapshotList.size() > 10) {
-                    snapshotList.removeFirst();
-                }
-            }
-        }, 1000, 1000, TimeUnit.MILLISECONDS);
+        executorService.scheduleAtFixedRate(
+                new TimerTask() {
+                    @Override
+                    public void run() {
+                        snapshotList.addLast(statsBenchmarkConsumer.createSnapshot());
+                        if (snapshotList.size() > 10) {
+                            snapshotList.removeFirst();
+                        }
+                    }
+                },
+                1000,
+                1000,
+                TimeUnit.MILLISECONDS);
 
-        executorService.scheduleAtFixedRate(new TimerTask() {
-            private void printStats() {
-                if (snapshotList.size() >= 10) {
-                    Long[] begin = snapshotList.getFirst();
-                    Long[] end = snapshotList.getLast();
+        executorService.scheduleAtFixedRate(
+                new TimerTask() {
+                    private void printStats() {
+                        if (snapshotList.size() >= 10) {
+                            Long[] begin = snapshotList.getFirst();
+                            Long[] end = snapshotList.getLast();
 
-                    final long consumeTps =
-                        (long) (((end[1] - begin[1]) / (double) (end[0] - begin[0])) * 1000L);
-                    final double averageB2CRT = (end[2] - begin[2]) / (double) (end[1] - begin[1]);
-                    final double averageS2CRT = (end[3] - begin[3]) / (double) (end[1] - begin[1]);
-                    final long failCount = end[4] - begin[4];
-                    final long b2cMax = statsBenchmarkConsumer.getBorn2ConsumerMaxRT().get();
-                    final long s2cMax = statsBenchmarkConsumer.getStore2ConsumerMaxRT().get();
+                            final long consumeTps =
+                                    (long)
+                                            (((end[1] - begin[1]) / (double) (end[0] - begin[0]))
+                                                    * 1000L);
+                            final double averageB2CRT =
+                                    (end[2] - begin[2]) / (double) (end[1] - begin[1]);
+                            final double averageS2CRT =
+                                    (end[3] - begin[3]) / (double) (end[1] - begin[1]);
+                            final long failCount = end[4] - begin[4];
+                            final long b2cMax =
+                                    statsBenchmarkConsumer.getBorn2ConsumerMaxRT().get();
+                            final long s2cMax =
+                                    statsBenchmarkConsumer.getStore2ConsumerMaxRT().get();
 
-                    statsBenchmarkConsumer.getBorn2ConsumerMaxRT().set(0);
-                    statsBenchmarkConsumer.getStore2ConsumerMaxRT().set(0);
+                            statsBenchmarkConsumer.getBorn2ConsumerMaxRT().set(0);
+                            statsBenchmarkConsumer.getStore2ConsumerMaxRT().set(0);
 
-                    System.out.printf("Current Time: %s TPS: %d FAIL: %d AVG(B2C) RT(ms): %7.3f AVG(S2C) RT(ms): %7.3f MAX(B2C) RT(ms): %d MAX(S2C) RT(ms): %d%n",
-                            System.currentTimeMillis(), consumeTps, failCount, averageB2CRT, averageS2CRT, b2cMax, s2cMax
-                    );
-                }
-            }
+                            System.out.printf(
+                                    "Current Time: %s TPS: %d FAIL: %d AVG(B2C) RT(ms): %7.3f"
+                                        + " AVG(S2C) RT(ms): %7.3f MAX(B2C) RT(ms): %d MAX(S2C)"
+                                        + " RT(ms): %d%n",
+                                    System.currentTimeMillis(),
+                                    consumeTps,
+                                    failCount,
+                                    averageB2CRT,
+                                    averageS2CRT,
+                                    b2cMax,
+                                    s2cMax);
+                        }
+                    }
 
-            @Override
-            public void run() {
-                try {
-                    this.printStats();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        }, 10000, 10000, TimeUnit.MILLISECONDS);
+                    @Override
+                    public void run() {
+                        try {
+                            this.printStats();
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                },
+                10000,
+                10000,
+                TimeUnit.MILLISECONDS);
 
         RPCHook rpcHook = null;
         if (aclEnable) {
-            String ak = commandLine.hasOption("ak") ? String.valueOf(commandLine.getOptionValue("ak")) : AclClient.ACL_ACCESS_KEY;
-            String sk = commandLine.hasOption("sk") ? String.valueOf(commandLine.getOptionValue("sk")) : AclClient.ACL_SECRET_KEY;
+            String ak =
+                    commandLine.hasOption("ak")
+                            ? String.valueOf(commandLine.getOptionValue("ak"))
+                            : AclClient.ACL_ACCESS_KEY;
+            String sk =
+                    commandLine.hasOption("sk")
+                            ? String.valueOf(commandLine.getOptionValue("sk"))
+                            : AclClient.ACL_SECRET_KEY;
             rpcHook = AclClient.getAclRPCHook(ak, sk);
         }
-        DefaultMQPushConsumer consumer = new DefaultMQPushConsumer(group, rpcHook, new AllocateMessageQueueAveragely(), msgTraceEnable, null);
+        DefaultMQPushConsumer consumer =
+                new DefaultMQPushConsumer(
+                        group, rpcHook, new AllocateMessageQueueAveragely(), msgTraceEnable, null);
         if (commandLine.hasOption('n')) {
             String ns = commandLine.getOptionValue('n');
             consumer.setNamesrvAddr(ns);
@@ -154,33 +218,36 @@ public class Consumer {
             }
         }
 
-        consumer.registerMessageListener(new MessageListenerConcurrently() {
-            @Override
-            public ConsumeConcurrentlyStatus consumeMessage(List<MessageExt> msgs,
-                ConsumeConcurrentlyContext context) {
-                MessageExt msg = msgs.get(0);
-                long now = System.currentTimeMillis();
+        consumer.registerMessageListener(
+                new MessageListenerConcurrently() {
+                    @Override
+                    public ConsumeConcurrentlyStatus consumeMessage(
+                            List<MessageExt> msgs, ConsumeConcurrentlyContext context) {
+                        MessageExt msg = msgs.get(0);
+                        long now = System.currentTimeMillis();
 
-                statsBenchmarkConsumer.getReceiveMessageTotalCount().increment();
+                        statsBenchmarkConsumer.getReceiveMessageTotalCount().increment();
 
-                long born2ConsumerRT = now - msg.getBornTimestamp();
-                statsBenchmarkConsumer.getBorn2ConsumerTotalRT().add(born2ConsumerRT);
+                        long born2ConsumerRT = now - msg.getBornTimestamp();
+                        statsBenchmarkConsumer.getBorn2ConsumerTotalRT().add(born2ConsumerRT);
 
-                long store2ConsumerRT = now - msg.getStoreTimestamp();
-                statsBenchmarkConsumer.getStore2ConsumerTotalRT().add(store2ConsumerRT);
+                        long store2ConsumerRT = now - msg.getStoreTimestamp();
+                        statsBenchmarkConsumer.getStore2ConsumerTotalRT().add(store2ConsumerRT);
 
-                compareAndSetMax(statsBenchmarkConsumer.getBorn2ConsumerMaxRT(), born2ConsumerRT);
+                        compareAndSetMax(
+                                statsBenchmarkConsumer.getBorn2ConsumerMaxRT(), born2ConsumerRT);
 
-                compareAndSetMax(statsBenchmarkConsumer.getStore2ConsumerMaxRT(), store2ConsumerRT);
+                        compareAndSetMax(
+                                statsBenchmarkConsumer.getStore2ConsumerMaxRT(), store2ConsumerRT);
 
-                if (ThreadLocalRandom.current().nextDouble() < failRate) {
-                    statsBenchmarkConsumer.getFailCount().increment();
-                    return ConsumeConcurrentlyStatus.RECONSUME_LATER;
-                } else {
-                    return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
-                }
-            }
-        });
+                        if (ThreadLocalRandom.current().nextDouble() < failRate) {
+                            statsBenchmarkConsumer.getFailCount().increment();
+                            return ConsumeConcurrentlyStatus.RECONSUME_LATER;
+                        } else {
+                            return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
+                        }
+                    }
+                });
 
         consumer.start();
 
@@ -199,7 +266,9 @@ public class Consumer {
         opt = new Option("g", "group", true, "Consumer group name, Default: benchmark_consumer");
         opt.setRequired(false);
         options.addOption(opt);
-        opt = new Option("p", "group prefix enable", true, "Is group prefix enable, Default: false");
+        opt =
+                new Option(
+                        "p", "group prefix enable", true, "Is group prefix enable, Default: false");
         opt.setRequired(false);
         options.addOption(opt);
 
@@ -207,7 +276,12 @@ public class Consumer {
         opt.setRequired(false);
         options.addOption(opt);
 
-        opt = new Option("e", "expression", true, "filter expression content file path.ie: ./test/expr");
+        opt =
+                new Option(
+                        "e",
+                        "expression",
+                        true,
+                        "filter expression content file path.ie: ./test/expr");
         opt.setRequired(false);
         options.addOption(opt);
 
@@ -238,8 +312,7 @@ public class Consumer {
         long prev = target.get();
         while (value > prev) {
             boolean updated = target.compareAndSet(prev, value);
-            if (updated)
-                break;
+            if (updated) break;
 
             prev = target.get();
         }
@@ -260,13 +333,14 @@ class StatsBenchmarkConsumer {
     private final LongAdder failCount = new LongAdder();
 
     public Long[] createSnapshot() {
-        Long[] snap = new Long[] {
-            System.currentTimeMillis(),
-            this.receiveMessageTotalCount.longValue(),
-            this.born2ConsumerTotalRT.longValue(),
-            this.store2ConsumerTotalRT.longValue(),
-            this.failCount.longValue()
-        };
+        Long[] snap =
+                new Long[] {
+                    System.currentTimeMillis(),
+                    this.receiveMessageTotalCount.longValue(),
+                    this.born2ConsumerTotalRT.longValue(),
+                    this.store2ConsumerTotalRT.longValue(),
+                    this.failCount.longValue()
+                };
 
         return snap;
     }

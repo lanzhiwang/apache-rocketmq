@@ -21,6 +21,7 @@ import io.jaegertracing.Configuration;
 import io.jaegertracing.internal.samplers.ConstSampler;
 import io.opentracing.Tracer;
 import io.opentracing.util.GlobalTracer;
+
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.producer.LocalTransactionState;
 import org.apache.rocketmq.client.producer.SendResult;
@@ -38,26 +39,34 @@ public class OpenTracingTransactionProducer {
     public static void main(String[] args) throws MQClientException, InterruptedException {
         Tracer tracer = initTracer();
 
-        TransactionMQProducer producer = new TransactionMQProducer("please_rename_unique_group_name");
-        producer.getDefaultMQProducerImpl().registerSendMessageHook(new SendMessageOpenTracingHookImpl(tracer));
-        producer.getDefaultMQProducerImpl().registerEndTransactionHook(new EndTransactionOpenTracingHookImpl(tracer));
+        TransactionMQProducer producer =
+                new TransactionMQProducer("please_rename_unique_group_name");
+        producer.getDefaultMQProducerImpl()
+                .registerSendMessageHook(new SendMessageOpenTracingHookImpl(tracer));
+        producer.getDefaultMQProducerImpl()
+                .registerEndTransactionHook(new EndTransactionOpenTracingHookImpl(tracer));
 
-        producer.setTransactionListener(new TransactionListener() {
-            @Override
-            public LocalTransactionState executeLocalTransaction(Message msg, Object arg) {
-                return LocalTransactionState.COMMIT_MESSAGE;
-            }
+        producer.setTransactionListener(
+                new TransactionListener() {
+                    @Override
+                    public LocalTransactionState executeLocalTransaction(Message msg, Object arg) {
+                        return LocalTransactionState.COMMIT_MESSAGE;
+                    }
 
-            @Override
-            public LocalTransactionState checkLocalTransaction(MessageExt msg) {
-                return LocalTransactionState.COMMIT_MESSAGE;
-            }
-        });
+                    @Override
+                    public LocalTransactionState checkLocalTransaction(MessageExt msg) {
+                        return LocalTransactionState.COMMIT_MESSAGE;
+                    }
+                });
         producer.start();
 
         try {
-            Message msg = new Message("TopicTest", "Tag", "KEY",
-                    "Hello RocketMQ".getBytes(RemotingHelper.DEFAULT_CHARSET));
+            Message msg =
+                    new Message(
+                            "TopicTest",
+                            "Tag",
+                            "KEY",
+                            "Hello RocketMQ".getBytes(RemotingHelper.DEFAULT_CHARSET));
             SendResult sendResult = producer.sendMessageInTransaction(msg, null);
             System.out.printf("%s%n", sendResult);
         } catch (MQClientException | UnsupportedEncodingException e) {
@@ -71,15 +80,17 @@ public class OpenTracingTransactionProducer {
     }
 
     private static Tracer initTracer() {
-        Configuration.SamplerConfiguration samplerConfig = Configuration.SamplerConfiguration.fromEnv()
-                .withType(ConstSampler.TYPE)
-                .withParam(1);
-        Configuration.ReporterConfiguration reporterConfig = Configuration.ReporterConfiguration.fromEnv()
-                .withLogSpans(true);
+        Configuration.SamplerConfiguration samplerConfig =
+                Configuration.SamplerConfiguration.fromEnv()
+                        .withType(ConstSampler.TYPE)
+                        .withParam(1);
+        Configuration.ReporterConfiguration reporterConfig =
+                Configuration.ReporterConfiguration.fromEnv().withLogSpans(true);
 
-        Configuration config = new Configuration("rocketmq")
-                .withSampler(samplerConfig)
-                .withReporter(reporterConfig);
+        Configuration config =
+                new Configuration("rocketmq")
+                        .withSampler(samplerConfig)
+                        .withReporter(reporterConfig);
         GlobalTracer.registerIfAbsent(config.getTracer());
         return config.getTracer();
     }

@@ -21,6 +21,7 @@ import io.jaegertracing.Configuration;
 import io.jaegertracing.internal.samplers.ConstSampler;
 import io.opentracing.Tracer;
 import io.opentracing.util.GlobalTracer;
+
 import org.apache.rocketmq.client.consumer.DefaultMQPushConsumer;
 import org.apache.rocketmq.client.consumer.listener.ConsumeConcurrentlyContext;
 import org.apache.rocketmq.client.consumer.listener.ConsumeConcurrentlyStatus;
@@ -37,34 +38,41 @@ public class OpenTracingPushConsumer {
         Tracer tracer = initTracer();
 
         DefaultMQPushConsumer consumer = new DefaultMQPushConsumer("CID_JODIE_1");
-        consumer.getDefaultMQPushConsumerImpl().registerConsumeMessageHook(new ConsumeMessageOpenTracingHookImpl(tracer));
+        consumer.getDefaultMQPushConsumerImpl()
+                .registerConsumeMessageHook(new ConsumeMessageOpenTracingHookImpl(tracer));
 
         consumer.subscribe("TopicTest", "*");
         consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_FIRST_OFFSET);
 
         consumer.setConsumeTimestamp("20181109221800");
-        consumer.registerMessageListener(new MessageListenerConcurrently() {
+        consumer.registerMessageListener(
+                new MessageListenerConcurrently() {
 
-            @Override
-            public ConsumeConcurrentlyStatus consumeMessage(List<MessageExt> msgs, ConsumeConcurrentlyContext context) {
-                System.out.printf("%s Receive New Messages: %s %n", Thread.currentThread().getName(), msgs);
-                return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
-            }
-        });
+                    @Override
+                    public ConsumeConcurrentlyStatus consumeMessage(
+                            List<MessageExt> msgs, ConsumeConcurrentlyContext context) {
+                        System.out.printf(
+                                "%s Receive New Messages: %s %n",
+                                Thread.currentThread().getName(), msgs);
+                        return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
+                    }
+                });
         consumer.start();
         System.out.printf("Consumer Started.%n");
     }
 
     private static Tracer initTracer() {
-        Configuration.SamplerConfiguration samplerConfig = Configuration.SamplerConfiguration.fromEnv()
-                .withType(ConstSampler.TYPE)
-                .withParam(1);
-        Configuration.ReporterConfiguration reporterConfig = Configuration.ReporterConfiguration.fromEnv()
-                .withLogSpans(true);
+        Configuration.SamplerConfiguration samplerConfig =
+                Configuration.SamplerConfiguration.fromEnv()
+                        .withType(ConstSampler.TYPE)
+                        .withParam(1);
+        Configuration.ReporterConfiguration reporterConfig =
+                Configuration.ReporterConfiguration.fromEnv().withLogSpans(true);
 
-        Configuration config = new Configuration("rocketmq")
-                .withSampler(samplerConfig)
-                .withReporter(reporterConfig);
+        Configuration config =
+                new Configuration("rocketmq")
+                        .withSampler(samplerConfig)
+                        .withReporter(reporterConfig);
         GlobalTracer.registerIfAbsent(config.getTracer());
         return config.getTracer();
     }

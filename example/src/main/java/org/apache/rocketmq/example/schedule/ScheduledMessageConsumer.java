@@ -24,28 +24,33 @@ import org.apache.rocketmq.common.message.MessageExt;
 
 import java.util.List;
 
+/** demo 11 */
 public class ScheduledMessageConsumer {
-    
+
     public static void main(String[] args) throws Exception {
         // Instantiate message consumer
         DefaultMQPushConsumer consumer = new DefaultMQPushConsumer("ExampleConsumer");
         // Subscribe topics
         consumer.subscribe("TestTopic", "*");
         // Register message listener
-        consumer.registerMessageListener(new MessageListenerConcurrently() {
-            @Override
-            public ConsumeConcurrentlyStatus consumeMessage(List<MessageExt> messages, ConsumeConcurrentlyContext context) {
-                for (MessageExt message : messages) {
-                    // Print approximate delay time period
-                    System.out.printf("Receive message[msgId=%s %d  ms later]\n", message.getMsgId(),
-                            System.currentTimeMillis() - message.getStoreTimestamp());
-                }
-                return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
-            }
-        });
+        consumer.registerMessageListener(
+                new MessageListenerConcurrently() {
+                    @Override
+                    public ConsumeConcurrentlyStatus consumeMessage(
+                            List<MessageExt> messages, ConsumeConcurrentlyContext context) {
+                        for (MessageExt message : messages) {
+                            // Print approximate delay time period
+                            System.out.printf(
+                                    "Receive message[msgId=%s %d  ms later]\n",
+                                    message.getMsgId(),
+                                    System.currentTimeMillis() - message.getStoreTimestamp());
+                        }
+                        return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
+                    }
+                });
         // Launch consumer
         consumer.start();
-        //info:to see the time effect, run the consumer first , it will wait for the msg
-        //then start the producer
+        // info:to see the time effect, run the consumer first , it will wait for the msg
+        // then start the producer
     }
 }
